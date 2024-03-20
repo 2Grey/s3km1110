@@ -55,7 +55,7 @@ void loop() {
             if (radar.read()) {
                 // Get radar info
                 bool isDetected = radar.isTargetDetected;
-                uint16_t targetDistance = radar.distanceToTarget;
+                int16_t targetDistance = radar.distanceToTarget;
             }
         }
     }
