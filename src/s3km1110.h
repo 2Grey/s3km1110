@@ -52,7 +52,7 @@ class s3km1110 {
 
         bool isTargetDetected = false;
         int16_t distanceToTarget = -1;  // Distance to the target in centimetres.
-        uint8_t distanceGateEnergy[S3KM1110_DISTANE_GATE_COUNT] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+        uint16_t distanceGateEnergy[S3KM1110_DISTANE_GATE_COUNT] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 
     protected:
     private:

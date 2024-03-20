@@ -286,7 +286,7 @@ bool s3km1110::_parseDataFrame()
 
         uint8_t distanceGateStart = 9;
         for (uint8_t idx = 0; idx < S3KM1110_DISTANE_GATE_COUNT; idx++) {
-            uint8_t energy = _radarDataFrame[distanceGateStart + idx] + (_radarDataFrame[distanceGateStart + idx + 1] << 8);
+            uint16_t energy = _radarDataFrame[distanceGateStart + idx] + (_radarDataFrame[distanceGateStart + idx + 1] << 8);
             distanceGateEnergy[idx] = energy;
 
             #ifdef S3KM1110_DEBUG_DATA
