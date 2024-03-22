@@ -94,7 +94,7 @@ bool s3km1110::setRadarConfigurationMinimumGates(uint8_t gates)
 {
     uint8_t newValue = max((uint8_t)0, min((uint8_t)15, gates));
     bool isSuccess = _setParameterConfiguration(S3KM1110_RADAR_CONFIG_DETECTION_DISTANE_MIN, newValue);
-    if (isSuccess) { radarConfiguration->detectionGatesMin = (uint8_t *)&newValue; }
+    if (isSuccess) { radarConfiguration->detectionGatesMin = (uint8_t*)(void*)(uintptr_t)newValue; }
     return isSuccess;
 }
 
@@ -102,28 +102,28 @@ bool s3km1110::setRadarConfigurationMaximumGates(uint8_t gates)
 {
     uint8_t newValue = max((uint8_t)0, min((uint8_t)15, gates));
     bool isSuccess = _setParameterConfiguration(S3KM1110_RADAR_CONFIG_DETECTION_DISTANE_MAX, newValue);
-    if (isSuccess) { radarConfiguration->detectionGatesMax = (uint8_t *)&newValue; }
+    if (isSuccess) { radarConfiguration->detectionGatesMax = (uint8_t*)(void*)(uintptr_t)newValue; }
     return isSuccess;
 }
 
 bool s3km1110::setRadarConfigurationActiveFrameNum(uint8_t num)
 {
     bool isSuccess = _setParameterConfiguration(S3KM1110_RADAR_CONFIG_TARGET_ACTIVE_FRAMES, num);
-    if (isSuccess) { radarConfiguration->activeFrameNum = (uint8_t *)&num; }
+    if (isSuccess) { radarConfiguration->activeFrameNum = (uint8_t*)(void*)(uintptr_t)num; }
     return isSuccess;
 }
 
 bool s3km1110::setRadarConfigurationInactiveFrameNum(uint8_t num)
 {
     bool isSuccess = _setParameterConfiguration(S3KM1110_RADAR_CONFIG_TARGET_INACTIVE_FRAMES, num);
-    if (isSuccess) { radarConfiguration->inactiveFrameNum = (uint8_t *)&num; }
+    if (isSuccess) { radarConfiguration->inactiveFrameNum = (uint8_t*)(void*)(uintptr_t)num; }
     return isSuccess;
 }
 
 bool s3km1110::setRadarConfigurationDelay(uint16_t delay)
 {
     bool isSuccess = _setParameterConfiguration(S3KM1110_RADAR_CONFIG_DISAPPEARANCE_DELAY, delay);
-    if (isSuccess) { radarConfiguration->delay = (uint16_t *)&delay; }
+    if (isSuccess) { radarConfiguration->delay = (uint16_t*)(void*)(uintptr_t)delay; }
     return isSuccess;
 }
 
@@ -416,19 +416,20 @@ bool s3km1110::_parseGetConfigCommandFrame(char *payload, uint8_t count)
     uint32_t result = payload[0] + (payload[1] << 8) + (payload[2] << 16) + (payload[3] << 24);
 
     if (_lastRadarConfigCommand == S3KM1110_RADAR_CONFIG_DETECTION_DISTANE_MIN) {
-        radarConfiguration->detectionGatesMin = (uint8_t *)&result;
+        
+        radarConfiguration->detectionGatesMin = (uint8_t*)(void*)(uintptr_t)result;
     }
     else if (_lastRadarConfigCommand == S3KM1110_RADAR_CONFIG_DETECTION_DISTANE_MAX) {
-        radarConfiguration->detectionGatesMax = (uint8_t *)&result;
+        radarConfiguration->detectionGatesMax = (uint8_t*)(void*)(uintptr_t)result;
     }
     else if (_lastRadarConfigCommand == S3KM1110_RADAR_CONFIG_TARGET_ACTIVE_FRAMES) {
-        radarConfiguration->activeFrameNum = (uint8_t *)&result;
+        radarConfiguration->activeFrameNum = (uint8_t*)(void*)(uintptr_t)result;
     }
     else if (_lastRadarConfigCommand == S3KM1110_RADAR_CONFIG_TARGET_INACTIVE_FRAMES) {
-        radarConfiguration->inactiveFrameNum = (uint8_t *)&result;
+        radarConfiguration->inactiveFrameNum = (uint8_t*)(void*)(uintptr_t)result;
     }
     else if (_lastRadarConfigCommand == S3KM1110_RADAR_CONFIG_DISAPPEARANCE_DELAY) {
-        radarConfiguration->delay = (uint16_t *)&result;
+        radarConfiguration->delay = (uint16_t*)(void*)(uintptr_t)result;
     } else {
         return false;
     }
