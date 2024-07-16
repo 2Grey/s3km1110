@@ -6,19 +6,19 @@
 #define S3KM1110_FRAME_COMMAND_SIZE 2
 #define S3KM1110_FRAME_LENGTH_SIZE 2
 
-#define S3KM1110_RESPONSE_COMMAND_READ_FIRMWARE_VERSION 0x00
+#define S3KM1110_RADAR_COMMAND_READ_FIRMWARE_VERSION 0x00
 // 0x01    // Write register
 // 0x02    // Read register
-#define S3KM1110_RESPONSE_COMMAND_RADAR_SET_CONFIG 0x07
-#define S3KM1110_RESPONSE_COMMAND_RADAR_READ_CONFIG 0x08
-#define S3KM1110_RESPONSE_COMMAND_READ_SERIAL_NUMBER 0x11
-#define S3KM1110_RESPONSE_COMMAND_SET_MODE 0x12
-#define S3KM1110_RESPONSE_COMMAND_READ_MODE 0x13
+#define S3KM1110_RADAR_COMMAND_RADAR_SET_CONFIG 0x07
+#define S3KM1110_RADAR_COMMAND_RADAR_READ_CONFIG 0x08
+#define S3KM1110_RADAR_COMMAND_READ_SERIAL_NUMBER 0x11
+#define S3KM1110_RADAR_COMMAND_SET_MODE 0x12
+#define S3KM1110_RADAR_COMMAND_READ_MODE 0x13
 // 0x24    // Enter factory test mode
 // 0x25    // Exit factory test mode
 // 0x26    // Send factory test results
-#define S3KM1110_RESPONSE_COMMAND_OPEN_COMMAND_MODE 0xFF
-#define S3KM1110_RESPONSE_COMMAND_CLOSE_COMMAND_MODE 0xFE
+#define S3KM1110_RADAR_COMMAND_OPEN_COMMAND_MODE 0xFF
+#define S3KM1110_RADAR_COMMAND_CLOSE_COMMAND_MODE 0xFE
 
 #define S3KM1110_RADAR_CONFIG_DETECTION_DISTANE_MIN 0x00
 #define S3KM1110_RADAR_CONFIG_DETECTION_DISTANE_MAX 0x01
@@ -28,7 +28,7 @@
 
 #define S3KM1110_RADAR_MODE_DEBUG 0x00
 #define S3KM1110_RADAR_MODE_REPORT 0x04
-#define S3KM1110_RADAR_MODE_RUNNING 0x064
+#define S3KM1110_RADAR_MODE_RUNNING 0x64
 
 s3km1110::s3km1110() {
     if (radarConfiguration == nullptr) {
@@ -75,17 +75,17 @@ bool s3km1110::read()
 
 bool s3km1110::_enableReportMode() 
 {
-    return _sendCommandAndWait(S3KM1110_RESPONSE_COMMAND_SET_MODE, 0, 2, S3KM1110_RADAR_MODE_REPORT, 4);
+    return _sendCommandAndWait(S3KM1110_RADAR_COMMAND_SET_MODE, 0, 2, S3KM1110_RADAR_MODE_REPORT, 4);
 }
 
 bool s3km1110::readFirmwareVersion()
 {
-    return _sendCommandAndWait(S3KM1110_RESPONSE_COMMAND_READ_FIRMWARE_VERSION, 0, 0);
+    return _sendCommandAndWait(S3KM1110_RADAR_COMMAND_READ_FIRMWARE_VERSION, 0, 0);
 }
 
 bool s3km1110::readSerialNumber()
 {
-    return _sendCommandAndWait(S3KM1110_RESPONSE_COMMAND_READ_SERIAL_NUMBER, 0, 0);
+    return _sendCommandAndWait(S3KM1110_RADAR_COMMAND_READ_SERIAL_NUMBER, 0, 0);
 }
 
 #pragma mark * Radar Configuration Set
@@ -132,31 +132,31 @@ bool s3km1110::setRadarConfigurationDelay(uint16_t delay)
 bool s3km1110::readRadarConfigMinimumGates()
 {
     _lastRadarConfigCommand = S3KM1110_RADAR_CONFIG_DETECTION_DISTANE_MIN;
-    return _sendCommandAndWait(S3KM1110_RESPONSE_COMMAND_RADAR_READ_CONFIG, S3KM1110_RADAR_CONFIG_DETECTION_DISTANE_MIN, 2);
+    return _sendCommandAndWait(S3KM1110_RADAR_COMMAND_RADAR_READ_CONFIG, S3KM1110_RADAR_CONFIG_DETECTION_DISTANE_MIN, 2);
 }
 
 bool s3km1110::readRadarConfigMaximumGates()
 {
     _lastRadarConfigCommand = S3KM1110_RADAR_CONFIG_DETECTION_DISTANE_MAX;
-    return _sendCommandAndWait(S3KM1110_RESPONSE_COMMAND_RADAR_READ_CONFIG, S3KM1110_RADAR_CONFIG_DETECTION_DISTANE_MAX, 2);
+    return _sendCommandAndWait(S3KM1110_RADAR_COMMAND_RADAR_READ_CONFIG, S3KM1110_RADAR_CONFIG_DETECTION_DISTANE_MAX, 2);
 }
 
 bool s3km1110::readRadarConfigActiveFrameNumber()
 {
     _lastRadarConfigCommand = S3KM1110_RADAR_CONFIG_TARGET_ACTIVE_FRAMES;
-    return _sendCommandAndWait(S3KM1110_RESPONSE_COMMAND_RADAR_READ_CONFIG, S3KM1110_RADAR_CONFIG_TARGET_ACTIVE_FRAMES, 2);
+    return _sendCommandAndWait(S3KM1110_RADAR_COMMAND_RADAR_READ_CONFIG, S3KM1110_RADAR_CONFIG_TARGET_ACTIVE_FRAMES, 2);
 }
 
 bool s3km1110::readRadarConfigInactiveFrameNumber()
 {
     _lastRadarConfigCommand = S3KM1110_RADAR_CONFIG_TARGET_INACTIVE_FRAMES;
-    return _sendCommandAndWait(S3KM1110_RESPONSE_COMMAND_RADAR_READ_CONFIG, S3KM1110_RADAR_CONFIG_TARGET_INACTIVE_FRAMES, 2);
+    return _sendCommandAndWait(S3KM1110_RADAR_COMMAND_RADAR_READ_CONFIG, S3KM1110_RADAR_CONFIG_TARGET_INACTIVE_FRAMES, 2);
 }
 
 bool s3km1110::readRadarConfigDelay()
 {
     _lastRadarConfigCommand = S3KM1110_RADAR_CONFIG_DISAPPEARANCE_DELAY;
-    return _sendCommandAndWait(S3KM1110_RESPONSE_COMMAND_RADAR_READ_CONFIG, S3KM1110_RADAR_CONFIG_DISAPPEARANCE_DELAY, 2);
+    return _sendCommandAndWait(S3KM1110_RADAR_COMMAND_RADAR_READ_CONFIG, S3KM1110_RADAR_CONFIG_DISAPPEARANCE_DELAY, 2);
 }
 
 bool s3km1110::readAllRadarConfigs()
@@ -328,7 +328,7 @@ bool s3km1110::_parseCommandFrame()
     _isLatestCommandSuccess = (_radarDataFrame[8] == 0x00 && _radarDataFrame[9] == 0x00);
 
     bool isWithPayloadSize = false;
-    if (_lastCommand == S3KM1110_RESPONSE_COMMAND_READ_SERIAL_NUMBER || _lastCommand == S3KM1110_RESPONSE_COMMAND_READ_FIRMWARE_VERSION) {
+    if (_lastCommand == S3KM1110_RADAR_COMMAND_READ_SERIAL_NUMBER || _lastCommand == S3KM1110_RADAR_COMMAND_READ_FIRMWARE_VERSION) {
         isWithPayloadSize = true;
     }
 
@@ -359,35 +359,35 @@ bool s3km1110::_parseCommandFrame()
     #endif
 
     bool isSuccess = false;
-    if (_lastCommand == S3KM1110_RESPONSE_COMMAND_OPEN_COMMAND_MODE) {
+    if (_lastCommand == S3KM1110_RADAR_COMMAND_OPEN_COMMAND_MODE) {
         return _isLatestCommandSuccess;
     }
-    else if (_lastCommand == S3KM1110_RESPONSE_COMMAND_CLOSE_COMMAND_MODE) {
+    else if (_lastCommand == S3KM1110_RADAR_COMMAND_CLOSE_COMMAND_MODE) {
         return _isLatestCommandSuccess;
     }
-    else if (_lastCommand == S3KM1110_RESPONSE_COMMAND_SET_MODE)
+    else if (_lastCommand == S3KM1110_RADAR_COMMAND_SET_MODE)
     {
         isSuccess = _isLatestCommandSuccess;
     } 
-    else if (_lastCommand == S3KM1110_RESPONSE_COMMAND_READ_SERIAL_NUMBER)
+    else if (_lastCommand == S3KM1110_RADAR_COMMAND_READ_SERIAL_NUMBER)
     {
         if (frame_payload_length > 0) {
             serialNumber = new String(payloadBytes);
             isSuccess = true;
         }
     } 
-    else if (_lastCommand == S3KM1110_RESPONSE_COMMAND_READ_FIRMWARE_VERSION)
+    else if (_lastCommand == S3KM1110_RADAR_COMMAND_READ_FIRMWARE_VERSION)
     {
         if (frame_payload_length > 0) {
             firmwareVersion = new String(payloadBytes);
             isSuccess = true;
         }
     }
-    else if (_lastCommand == S3KM1110_RESPONSE_COMMAND_RADAR_SET_CONFIG) 
+    else if (_lastCommand == S3KM1110_RADAR_COMMAND_RADAR_SET_CONFIG) 
     {
         return _isLatestCommandSuccess;
     }
-    else if (_lastCommand == S3KM1110_RESPONSE_COMMAND_RADAR_READ_CONFIG)
+    else if (_lastCommand == S3KM1110_RADAR_COMMAND_RADAR_READ_CONFIG)
     {
         return _parseGetConfigCommandFrame(payloadBytes, frame_payload_length);
     }
@@ -439,19 +439,19 @@ bool s3km1110::_parseGetConfigCommandFrame(char *payload, uint8_t count)
 
 bool s3km1110::_setParameterConfiguration(uint16_t parameterCode, int value)
 {
-    return _sendCommandAndWait(S3KM1110_RESPONSE_COMMAND_RADAR_SET_CONFIG, parameterCode, 2, value, 4);
+    return _sendCommandAndWait(S3KM1110_RADAR_COMMAND_RADAR_SET_CONFIG, parameterCode, 2, value, 4);
 }
 
 #pragma mark - Command mode
 
 bool s3km1110::_openCommandMode()
 {
-    return _sendCommandAndWait(S3KM1110_RESPONSE_COMMAND_OPEN_COMMAND_MODE, 1, 2, true);
+    return _sendCommandAndWait(S3KM1110_RADAR_COMMAND_OPEN_COMMAND_MODE, 1, 2, true);
 }
 
 bool s3km1110::_closeCommandMode()
 {
-    return _sendCommandAndWait(S3KM1110_RESPONSE_COMMAND_CLOSE_COMMAND_MODE, 0, 0, true);
+    return _sendCommandAndWait(S3KM1110_RADAR_COMMAND_CLOSE_COMMAND_MODE, 0, 0, true);
 }
 
 #pragma mark * Helpers

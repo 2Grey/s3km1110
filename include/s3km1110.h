@@ -88,7 +88,7 @@ class s3km1110 {
         bool _sendCommandAndWait(uint16_t, uint32_t, uint8_t, uint32_t, uint8_t, bool isSkipCommandMode = false);
         bool _setParameterConfiguration(uint16_t parameter, int value);
 
-        String _intToHex(int value, uint8_t width = 8);
+        String _intToHex(int, uint8_t);
 
         bool _openCommandMode();
         bool _closeCommandMode();

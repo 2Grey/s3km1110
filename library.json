@@ -1,0 +1,19 @@
+{
+    "name": "s3km1110",
+    "version": "0.5.0",
+    "description": "A library for the mmWave Sensor on S3KM1110 chip",
+    "keywords": "s3km1110, mmWave, micro-motion",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/2Grey/s3km1110.git"
+    },
+    "authors": [
+        {
+            "name": "2Grey",
+            "email": "i2greyi(at)gmail.com",
+            "url": "https://github.com/2Grey"
+        }
+    ],
+    "license": "MIT",
+    "platforms": "*"
+}
