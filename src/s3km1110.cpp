@@ -46,6 +46,10 @@ bool s3km1110::begin(Stream &dataStream, Stream &debugStream)
     }
     #endif
 
+    if (!_uartRadar) {
+        return false;
+    }
+
     return _enableReportMode();
 }
 
