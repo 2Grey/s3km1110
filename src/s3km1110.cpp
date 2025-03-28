@@ -30,18 +30,8 @@
 #define S3KM1110_RADAR_MODE_REPORT 0x04
 #define S3KM1110_RADAR_MODE_RUNNING 0x64
 
-s3km1110::s3km1110() {
-    if (radarConfiguration == nullptr) {
-        radarConfiguration = new s3km1110ConfigParameters();
-    }
-}
-s3km1110::~s3km1110(){
-    _uartRadar = nullptr;
-    _uartDebug = nullptr;
-    firmwareVersion = nullptr;
-    serialNumber = nullptr;
-    radarConfiguration = nullptr;
-}
+s3km1110::s3km1110() : radarConfiguration(0) {};
+s3km1110::~s3km1110() = default;
 
 #pragma mark - Public
 
