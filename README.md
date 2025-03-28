@@ -1,5 +1,7 @@
 # S3KM1110
 
+[![PlatformIO Registry](https://badges.registry.platformio.org/packages/2grey/library/s3km1110.svg)](https://registry.platformio.org/libraries/2grey/s3km1110)
+
 ## Introduction
 
 An Arduino library for the mmWave Sensor on S3KM1110 chip.\
