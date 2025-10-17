@@ -30,6 +30,8 @@ The S3KM1110 has a number of 'gates', each of which correspond to a distance of 
 
 ## How to use
 
+Check out [Example file](https://github.com/2Grey/s3km1110/blob/main/examples/main.cpp)
+
 ```cpp
 #include <s3km1110.h>
 
