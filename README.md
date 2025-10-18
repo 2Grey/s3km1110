@@ -28,9 +28,21 @@ If you have the breakout board, you can use the VCC, GND, TX and RX pins to work
 
 The S3KM1110 has a number of 'gates', each of which correspond to a distance of about 0.70m and many of the settings/measurements are calculated from this.
 
-## How to use
+## Usage
 
-Check out [Example file](https://github.com/2Grey/s3km1110/blob/main/examples/main.cpp)
+1. Create radar: `s3km1110 radar`
+2. Start radar in `setup()` with help of `begin` method: `radar.begin(Serial2, Serial)`  
+First parameter required is radar Serial  
+Second parameter optional is debug Serial
+
+3. Call radar's `read` methon in `loop()`: `radar.read()`
+4. If `read` is success, then get radar info with following variables:
+  * `radar.isTargetDetected` – Check is radar detect something
+  * `radar.distanceToTarget` – Get distance to target
+
+## Example
+
+For a detailed example, check out [full example file](https://github.com/2Grey/s3km1110/blob/main/examples/main.cpp)
 
 ```cpp
 #include <s3km1110.h>
