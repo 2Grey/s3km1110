@@ -1,6 +1,14 @@
-# S3KM1110
+<div align="center">
 
+# S3KM1110
+ 
+[![Arduino](https://img.shields.io/badge/Arduino-00979D?logo=Arduino&logoColor=white)](https://www.arduino.cc/)
+[![Language](https://img.shields.io/badge/C%2B%2B-00599C?logo=c%2B%2B&logoColor=white)](https://isocpp.org/)
+[![License](https://img.shields.io/github/license/2Grey/s3km1110)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/2Grey/s3km1110)](https://github.com/2Grey/s3km1110/releases)
 [![PlatformIO Registry](https://badges.registry.platformio.org/packages/2grey/library/s3km1110.svg)](https://registry.platformio.org/libraries/2grey/s3km1110)
+
+</div>
 
 > [!NOTE]  
 > I would appreciate your feedback via [Issues](https://github.com/2Grey/s3km1110/issues)
