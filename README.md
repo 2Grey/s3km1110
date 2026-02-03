@@ -56,3 +56,6 @@ For a detailed example, check out [full example file](https://github.com/2Grey/s
 - Work with factory test mode
 - Read data in Debug mode
 - Read data in Running mode
+
+## Disclaimer
+This library is an independent project and is not affiliated with, endorsed by, or connected to Arduino®.
