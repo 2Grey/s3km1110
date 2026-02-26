@@ -18,7 +18,7 @@
       #define RADAR_SERIAL Serial1
       #define RADAR_RX_PIN 4
       #define RADAR_TX_PIN 5
-    #else 
+    #else
       #error Target CONFIG_IDF_TARGET is not supported
     #endif
   #else // ESP32 Before IDF 4.0
@@ -65,7 +65,7 @@ void setup(void)
         delay(1000);
     }
 
-    Serial.printf("Radar status: %s\n", isRadarEnabled ? "Ok" : "Failed");  
+    Serial.printf("Radar status: %s\n", isRadarEnabled ? "Ok" : "Failed");
 
     if (isRadarEnabled) {
         if (radar.readFirmwareVersion()) {
@@ -74,7 +74,7 @@ void setup(void)
         if (radar.readSerialNumber()) {
           MONITOR_SERIAL.printf("[Info] Radar Serial number: %s\n", radar.serialNumber);
         }
-        
+
         auto config = radar.radarConfiguration;
         MONITOR_SERIAL.printf("[Info] Radar config:\n");
         MONITOR_SERIAL.printf("|- Gates min: %u\n", config.detectionGatesMin);
@@ -85,7 +85,7 @@ void setup(void)
 
 void loop(void)
 {
-  if (radar.read()) {        
+  if (radar.read()) {
     bool newIsDetected = radar.isTargetDetected;
     uint16_t newDistance = radar.distanceToTarget;
 
@@ -104,11 +104,10 @@ void loop(void)
     lastDistance = newDistance;
   }
 
-  static uint32_t lastCheck = 0;
-    if (millis() - lastCheck > 5000) {
-        lastCheck = millis();
-        if (!radar.isActive()) {
-            MONITOR_SERIAL.println("[WARN] Radar not sending data (Check wiring or power)");
-        }
-    }
+  static uint32_t nextWarning = 0;
+  if (!radar.isActive() && millis() > nextWarning) {
+    // throttle warnings to at most once every 5 seconds
+    nextWarning = millis() + 5000;
+    MONITOR_SERIAL.println("[WARN] Radar not sending data (Check wiring or power)");
+  }
 }
