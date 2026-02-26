@@ -121,7 +121,6 @@ bool s3km1110::_read_frame()
 {
     while (_uartRadar->available()) {
         uint8_t _readData = _uartRadar->read();
-        _radarUartLastPacketTime = millis();
         
         if (_isFrameStarted == false) {
             if (_readData == 0xF4) {
@@ -150,12 +149,18 @@ bool s3km1110::_read_frame()
                         bool result = _parseDataFrame();
                         _isFrameStarted = false;
                         _radarDataFramePosition = 0;
-                        if (result) return true;
+                        if (result) {
+                            _radarUartLastPacketTime = millis();
+                            return true;
+                        }
                     } else if (_isCommandFrameComplete()) {
                         bool result = _parseCommandFrame();
                         _isFrameStarted = false;
                         _radarDataFramePosition = 0;
-                        if (result) return true;
+                        if (result) {
+                            _radarUartLastPacketTime = millis();
+                            return true;
+                        } 
                     }
                 }
             }

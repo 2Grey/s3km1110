@@ -92,7 +92,7 @@ class s3km1110 {
         Stream *_uartRadar = nullptr;
         Stream *_uartDebug = nullptr;
 
-        const uint32_t kRadarUartcommandTimeout = 100;
+        const uint32_t kRadarUartcommandTimeout = 250;
         uint32_t _radarUartLastPacketTime = 0;
         uint32_t _radarUartLastCommandTime = 0;
 
