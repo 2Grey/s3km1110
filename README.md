@@ -19,12 +19,12 @@
 
 ## Introduction
 
-An Arduino library for the mmWave Sensor on S3KM1110 chip.\
-Is a human micro-motion sensor that can detect and recognize moving, standing, and stationary human body.
+An Arduino library for the S3KM1110 mmWave sensor.
+The sensor can detect moving, standing, and stationary human presence using micro-motion detection.
 
 ![](https://www.waveshare.com/w/A6Y79bcq/Kdy80nYY.php?f=HMMD_mmWave_Sensor.jpg&width=600)
 
-The code in this library is  based heavily off this [LD2410](https://github.com/ncmreynolds/ld2410), [Waveshare](https://www.waveshare.com/wiki/HMMD_mmWave_Sensor) documentations.
+This library is based heavily on the [LD2410](https://github.com/ncmreynolds/ld2410) library and [Waveshare](https://www.waveshare.com/wiki/HMMD_mmWave_Sensor) documentation.
 
 This library allows you to configure and use the sensor over serial connection.\
 The Sensor communicates over serial at 115200 baud by default.
@@ -50,7 +50,7 @@ The S3KM1110 has a number of 'gates', each of which correspond to a distance of 
 First parameter required is radar Serial  
 Second parameter optional is debug Serial
 
-3. Call radar's `read` methon in `loop()`: `radar.read()`
+3. Call radar's `read` method in `loop()`: `radar.read()`
 4. If `read` is success, then get radar info with following variables:
   * `radar.isTargetDetected` – Check is radar detect something
   * `radar.distanceToTarget` – Get distance to target
@@ -58,6 +58,11 @@ Second parameter optional is debug Serial
 ## Example
 
 For a detailed example, check out [full example file](https://github.com/2Grey/s3km1110/blob/main/examples/main.cpp)
+
+## Development checks
+
+Run `pio run` to build both ESP32 example environments. Protocol checks can also
+run without a board; see [native test instructions](test/native/README.md).
 
 ## Not implemented features
 - Work with registers

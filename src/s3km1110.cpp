@@ -1,55 +1,84 @@
-#ifndef s3km1110_cpp
-#define s3km1110_cpp
-
 #include "s3km1110.h"
 
-s3km1110::s3km1110() {};
+namespace {
+constexpr uint8_t kDataHeader[] = {0xF4, 0xF3, 0xF2, 0xF1};
+constexpr uint8_t kDataFooter[] = {0xF8, 0xF7, 0xF6, 0xF5};
+constexpr uint8_t kCommandHeader[] = {0xFD, 0xFC, 0xFB, 0xFA};
+constexpr uint8_t kCommandFooter[] = {0x04, 0x03, 0x02, 0x01};
+constexpr uint8_t kMarkerSize = sizeof(kDataHeader);
+constexpr uint8_t kLengthOffset = kMarkerSize;
+constexpr uint8_t kBodyOffset = kLengthOffset + 2;
+constexpr uint8_t kCommandResponseSize = 4; // Command (2 bytes) and status (2 bytes).
+constexpr uint8_t kStringLengthSize = 2;
+constexpr uint8_t kReportBodySize = 3 + s3km1110::kDistanceGateCount * 2;
+constexpr uint8_t kMaxGate = s3km1110::kDistanceGateCount - 1;
+
+uint8_t clampGate(uint32_t value)
+{
+    return static_cast<uint8_t>(value > kMaxGate ? kMaxGate : value);
+}
+
+String readPayloadString(const uint8_t *payload, uint8_t length)
+{
+    String result;
+    result.reserve(length);
+    for (uint8_t i = 0; i < length && payload[i] != 0; ++i) {
+        result += static_cast<char>(payload[i]);
+    }
+    return result;
+}
+} // namespace
+
+s3km1110::s3km1110() = default;
 s3km1110::~s3km1110() = default;
 
-#pragma mark - Public
+bool s3km1110::begin(Stream &dataStream)
+{
+    return _begin(dataStream, nullptr);
+}
 
 bool s3km1110::begin(Stream &dataStream, Stream &debugStream)
 {
-    // UARTs
-    _uartRadar = &dataStream;
-    _uartDebug = &debugStream;
-    #if defined(ESP8266)
-    if (&debugStream == &Serial) {
-        _uartDebug->write(17); //Send an XON to stop the hung terminal after reset on ESP8266
-    }
-    #endif
+    return _begin(dataStream, &debugStream);
+}
 
-    if (!_uartRadar) {
+bool s3km1110::_begin(Stream &dataStream, Stream *debugStream)
+{
+    _uartRadar = &dataStream;
+    _uartDebug = debugStream;
+    _resetFrame();
+    _hasReceivedPacket = false;
+    _isLatestCommandSuccess = false;
+
+#if defined(ESP8266)
+    if (_uartDebug == &Serial) {
+        _uartDebug->write(17); // Send XON to unfreeze the terminal after reset.
+    }
+#endif
+
+    if (!_enableReportMode()) {
         return false;
     }
-
-    #if !defined(S3KM1110_SKIP_READ_CONFIG_ON_BEGIN)
-    if (_enableReportMode()) {
-        readAllRadarConfigs();
-        return true;
-    }
-    #else
-    return _enableReportMode();
-    #endif // S3KM1110_SKIP_READ_CONFIG_ON_BEGIN
-
-    return false;
+#if !defined(S3KM1110_SKIP_READ_CONFIG_ON_BEGIN)
+    return readAllRadarConfigs();
+#else
+    return true;
+#endif
 }
 
 bool s3km1110::isActive()
 {
-    return (millis() - _radarUartLastPacketTime < kRadarUartcommandTimeout);
+    return _hasReceivedPacket && millis() - _radarUartLastPacketTime < kCommandTimeoutMs;
 }
 
 bool s3km1110::read()
 {
-    return _read_frame();
+    return _readFrame();
 }
 
-#pragma mark - Send command
-
-bool s3km1110::_enableReportMode() 
+bool s3km1110::_enableReportMode()
 {
-    return _sendCommandAndWait(static_cast<uint16_t>(RadarCommand::SetMode), 0, 2, static_cast<uint32_t>(RadarMode::Report), 4);
+    return _sendCommandAndWait(RadarCommand::SetMode, 0, 2, static_cast<uint32_t>(RadarMode::Report), 4);
 }
 
 bool s3km1110::readFirmwareVersion()
@@ -62,333 +91,306 @@ bool s3km1110::readSerialNumber()
     return _sendCommandAndWait(RadarCommand::ReadSerialNumber, 0, 0);
 }
 
-#pragma mark * Radar Configuration Set
-
 bool s3km1110::setRadarConfigurationMinimumGates(uint8_t gates)
 {
-    uint8_t newValue = max((uint8_t)0, min((uint8_t)15, gates));
-    bool isSuccess = _setParameterConfiguration(static_cast<uint16_t>(ConfigParam::MinDistance), newValue);
-    if (isSuccess) { radarConfiguration.detectionGatesMin = newValue; }
-    return isSuccess;
+    const uint8_t value = clampGate(gates);
+    if (!_setParameterConfiguration(ConfigParam::MinDistance, value)) {
+        return false;
+    }
+    radarConfiguration.detectionGatesMin = value;
+    return true;
 }
 
 bool s3km1110::setRadarConfigurationMaximumGates(uint8_t gates)
 {
-    uint8_t newValue = max((uint8_t)0, min((uint8_t)15, gates));
-    bool isSuccess = _setParameterConfiguration(static_cast<uint16_t>(ConfigParam::MaxDistance), newValue);
-    if (isSuccess) { radarConfiguration.detectionGatesMax = newValue; }
-    return isSuccess;
+    const uint8_t value = clampGate(gates);
+    if (!_setParameterConfiguration(ConfigParam::MaxDistance, value)) {
+        return false;
+    }
+    radarConfiguration.detectionGatesMax = value;
+    return true;
 }
 
 bool s3km1110::setRadarConfigurationTargetDisappearanceDelay(uint16_t delay)
 {
-    bool isSuccess = _setParameterConfiguration(static_cast<uint16_t>(ConfigParam::DisappearanceDelay), delay);
-    if (isSuccess) { radarConfiguration.targetDisappearanceDelay = delay; }
-    return isSuccess;
+    if (!_setParameterConfiguration(ConfigParam::DisappearanceDelay, delay)) {
+        return false;
+    }
+    radarConfiguration.targetDisappearanceDelay = delay;
+    return true;
 }
-
-#pragma mark * Radar Configuration Read
 
 bool s3km1110::readRadarConfigMinimumGates()
 {
-    _lastRadarConfigCommand = ConfigParam::MinDistance;
-    return _sendCommandAndWait(RadarCommand::ReadConfig, static_cast<uint32_t>(ConfigParam::MinDistance), 2);
+    return _readParameterConfiguration(ConfigParam::MinDistance);
 }
 
 bool s3km1110::readRadarConfigMaximumGates()
 {
-    _lastRadarConfigCommand = ConfigParam::MaxDistance;
-    return _sendCommandAndWait(RadarCommand::ReadConfig, static_cast<uint32_t>(ConfigParam::MaxDistance), 2);
+    return _readParameterConfiguration(ConfigParam::MaxDistance);
 }
 
 bool s3km1110::readRadarConfigTargetDisappearanceDelay()
 {
-    _lastRadarConfigCommand = ConfigParam::DisappearanceDelay;
-    return _sendCommandAndWait(RadarCommand::ReadConfig, static_cast<uint32_t>(ConfigParam::DisappearanceDelay), 2);
+    return _readParameterConfiguration(ConfigParam::DisappearanceDelay);
 }
 
 bool s3km1110::readAllRadarConfigs()
 {
-    return
-        readRadarConfigMinimumGates() &&
-        readRadarConfigMaximumGates() &&
-        readRadarConfigTargetDisappearanceDelay();
+    return readRadarConfigMinimumGates() &&
+           readRadarConfigMaximumGates() &&
+           readRadarConfigTargetDisappearanceDelay();
 }
 
-#pragma mark - Private
-
-bool s3km1110::_read_frame()
+bool s3km1110::_readParameterConfiguration(ConfigParam parameter)
 {
-    while (_uartRadar->available()) {
-        uint8_t _readData = _uartRadar->read();
-        
-        if (_isFrameStarted == false) {
-            if (_readData == 0xF4) {
-                _radarDataFrame[_radarDataFramePosition++] = _readData;
-                _isFrameStarted = true;
-                _isCommandFrame = false;
-            } else if (_readData == 0xFD) {
-                _radarDataFrame[_radarDataFramePosition++] = _readData;
-                _isFrameStarted = true;
-                _isCommandFrame = true;
-            }
-        } else {
-            if (_radarDataFramePosition >= kMaxFrameLength) {
-                #if defined(S3KM1110_DEBUG_COMMANDS) || defined(S3KM1110_DEBUG_DATA)
-                if (_uartDebug != nullptr) {
-                    _uartDebug->println(F("[Error] Frame out of size"));
-                }
-                #endif
-                _radarDataFramePosition = 0;
-                _isFrameStarted = false;
-            } else {
-                _radarDataFrame[_radarDataFramePosition++] = _readData;
+    _lastRadarConfigCommand = parameter;
+    return _sendCommandAndWait(RadarCommand::ReadConfig, static_cast<uint32_t>(parameter), 2);
+}
 
-                if (_radarDataFramePosition >= 8) {
-                    if (_isDataFrameComplete()) {
-                        bool result = _parseDataFrame();
-                        _isFrameStarted = false;
-                        _radarDataFramePosition = 0;
-                        if (result) {
-                            _radarUartLastPacketTime = millis();
-                            return true;
-                        }
-                    } else if (_isCommandFrameComplete()) {
-                        bool result = _parseCommandFrame();
-                        _isFrameStarted = false;
-                        _radarDataFramePosition = 0;
-                        if (result) {
-                            _radarUartLastPacketTime = millis();
-                            return true;
-                        } 
-                    }
-                }
+bool s3km1110::_readFrame()
+{
+    if (_uartRadar == nullptr) {
+        return false;
+    }
+
+    while (_uartRadar->available()) {
+        const int nextByte = _uartRadar->read();
+        if (nextByte < 0) {
+            break;
+        }
+        const uint8_t data = static_cast<uint8_t>(nextByte);
+        if (_radarDataFramePosition == 0) {
+            _tryStartFrame(data);
+            continue;
+        }
+        if (_radarDataFramePosition >= kMaxFrameLength) {
+            _resetFrame();
+            _tryStartFrame(data);
+            continue;
+        }
+
+        _radarDataFrame[_radarDataFramePosition++] = data;
+        const FrameValidation validation = _getCurrentFrameValidation();
+        if (validation == FrameValidation::Invalid) {
+            _resetFrame();
+            _tryStartFrame(data);
+        } else if (validation == FrameValidation::Complete) {
+            const bool result = _isCommandFrame ? _parseCommandFrame() : _parseDataFrame();
+            _resetFrame();
+            if (result) {
+                _radarUartLastPacketTime = millis();
+                _hasReceivedPacket = true;
+                return true;
             }
         }
     }
-
     return false;
+}
+
+bool s3km1110::_tryStartFrame(uint8_t data)
+{
+    if (data != kDataHeader[0] && data != kCommandHeader[0]) {
+        return false;
+    }
+    _radarDataFrame[0] = data;
+    _radarDataFramePosition = 1;
+    _isCommandFrame = data == kCommandHeader[0];
+    return true;
+}
+
+void s3km1110::_resetFrame()
+{
+    _radarDataFramePosition = 0;
+    _isCommandFrame = false;
 }
 
 void s3km1110::_printCurrentFrame()
 {
-    #if defined(S3KM1110_DEBUG_COMMANDS) || defined(S3KM1110_DEBUG_DATA)
-    if (_uartDebug == nullptr) { return; }
-    for (uint8_t idx = 0; idx < _radarDataFramePosition; idx++) {
-        if (_radarDataFrame[idx] < 0x10) { _uartDebug->print('0'); }
-        _uartDebug->print(_radarDataFrame[idx], HEX);
+#if defined(S3KM1110_DEBUG_COMMANDS) || defined(S3KM1110_DEBUG_DATA)
+    if (_uartDebug == nullptr) {
+        return;
+    }
+    for (uint8_t i = 0; i < _radarDataFramePosition; ++i) {
+        if (_radarDataFrame[i] < 0x10) {
+            _uartDebug->print('0');
+        }
+        _uartDebug->print(_radarDataFrame[i], HEX);
         _uartDebug->print(' ');
     }
-    _uartDebug->println(' ');
-    #endif
+    _uartDebug->println();
+#endif
 }
 
-bool s3km1110::_isDataFrameComplete()
+uint16_t s3km1110::_readLittleEndian16(uint8_t offset) const
 {
-    return 
-        _radarDataFrame[0]                              == 0xF4 &&
-        _radarDataFrame[1]                              == 0xF3 &&
-        _radarDataFrame[2]                              == 0xF2 &&
-        _radarDataFrame[3]                              == 0xF1 &&
-        _radarDataFrame[_radarDataFramePosition - 4] == 0xF8 &&
-        _radarDataFrame[_radarDataFramePosition - 3] == 0xF7 &&
-        _radarDataFrame[_radarDataFramePosition - 2] == 0xF6 &&
-        _radarDataFrame[_radarDataFramePosition - 1] == 0xF5;
+    return static_cast<uint16_t>(_radarDataFrame[offset]) |
+           (static_cast<uint16_t>(_radarDataFrame[offset + 1]) << 8);
 }
 
-bool s3km1110::_isCommandFrameComplete()
+uint32_t s3km1110::_readLittleEndian32(const uint8_t *buffer) const
 {
-    return
-        _radarDataFrame[0]                              == 0xFD &&
-		_radarDataFrame[1]                              == 0xFC &&
-		_radarDataFrame[2]                              == 0xFB &&
-		_radarDataFrame[3]                              == 0xFA &&
-        _radarDataFrame[_radarDataFramePosition - 4] == 0x04 &&
-        _radarDataFrame[_radarDataFramePosition - 3] == 0x03 &&
-        _radarDataFrame[_radarDataFramePosition - 2] == 0x02 &&
-        _radarDataFrame[_radarDataFramePosition - 1] == 0x01;
+    return static_cast<uint32_t>(buffer[0]) |
+           (static_cast<uint32_t>(buffer[1]) << 8) |
+           (static_cast<uint32_t>(buffer[2]) << 16) |
+           (static_cast<uint32_t>(buffer[3]) << 24);
+}
+
+s3km1110::FrameValidation s3km1110::_getCurrentFrameValidation() const
+{
+    return _isCommandFrame ? _validateFrame(kCommandHeader, kCommandFooter)
+                           : _validateFrame(kDataHeader, kDataFooter);
+}
+
+s3km1110::FrameValidation s3km1110::_validateFrame(const uint8_t *header, const uint8_t *footer) const
+{
+    for (uint8_t i = 0; i < kMarkerSize && i < _radarDataFramePosition; ++i) {
+        if (_radarDataFrame[i] != header[i]) {
+            return FrameValidation::Invalid;
+        }
+    }
+    if (_radarDataFramePosition < kBodyOffset) {
+        return FrameValidation::Incomplete;
+    }
+
+    const uint32_t expectedLength = kBodyOffset + static_cast<uint32_t>(_readLittleEndian16(kLengthOffset)) + kMarkerSize;
+    if (expectedLength > kMaxFrameLength || _radarDataFramePosition > expectedLength) {
+        return FrameValidation::Invalid;
+    }
+    if (_radarDataFramePosition < expectedLength) {
+        return FrameValidation::Incomplete;
+    }
+    const uint8_t footerOffset = static_cast<uint8_t>(expectedLength - kMarkerSize);
+    for (uint8_t i = 0; i < kMarkerSize; ++i) {
+        if (_radarDataFrame[footerOffset + i] != footer[i]) {
+            return FrameValidation::Invalid;
+        }
+    }
+    return FrameValidation::Complete;
 }
 
 bool s3km1110::_parseDataFrame()
 {
-    uint8_t frame_data_length = _radarDataFrame[4] + (_radarDataFrame[5] << 8);
-
-    #ifdef S3KM1110_DEBUG_DATA
+#ifdef S3KM1110_DEBUG_DATA
     if (_uartDebug != nullptr) {
-        _uartDebug->println(F("––––––––––––––––––––––––––––––––––––––––"));
         _uartDebug->print(F("RCV DTA: "));
         _printCurrentFrame();
     }
-    #endif
-
-    if (frame_data_length == 35) {
-        uint8_t detectionResultRaw = _radarDataFrame[6];
-        distanceToTarget = _radarDataFrame[7] + (_radarDataFrame[8] << 8);
-        isTargetDetected = detectionResultRaw == 0x01;
-
-        #ifdef S3KM1110_DEBUG_DATA
-        if (_uartDebug != nullptr) {
-            _uartDebug->printf("Detected: %x | Distance: %u\n", detectionResultRaw, distanceToTarget);
-            _uartDebug->print(F("Gate energy:\n"));
-            for (uint8_t i = 0; i < kDistanceGateCount; i++) {
-                _uartDebug->printf("%02u\t", i);
-            }
-            _uartDebug->print('\n');
-        }
-        #endif
-
-        uint8_t distanceGateStart = 9;
-        for (uint8_t idx = 0; idx < kDistanceGateCount; idx++) {
-            uint16_t energy = _radarDataFrame[distanceGateStart + idx] + (_radarDataFrame[distanceGateStart + idx + 1] << 8);
-            distanceGateEnergy[idx] = energy;
-
-            #ifdef S3KM1110_DEBUG_DATA
-            if (_uartDebug != nullptr) {
-                _uartDebug->printf("%02u\t", distanceGateEnergy[idx]);
-            }
-            #endif
-        }
-        #ifdef S3KM1110_DEBUG_DATA
-        if (_uartDebug != nullptr) {
-            _uartDebug->print('\n');
-        }
-        #endif
-
-        return true;
-    } else {
-        #ifdef S3KM1110_DEBUG_DATA
-        if (_uartDebug != nullptr) {
-            _uartDebug->print(F("\nFrame length unexpected: "));
-            _uartDebug->print(_radarDataFramePosition);
-            _uartDebug->print('\n');
-        }
-        #endif
+#endif
+    if (_readLittleEndian16(kLengthOffset) != kReportBodySize) {
+        return false;
     }
 
-    #ifdef S3KM1110_DEBUG_DATA
+    isTargetDetected = _radarDataFrame[kBodyOffset] == 0x01;
+    distanceToTarget = static_cast<int16_t>(_readLittleEndian16(kBodyOffset + 1));
+    for (uint8_t i = 0; i < kDistanceGateCount; ++i) {
+        distanceGateEnergy[i] = _readLittleEndian16(kBodyOffset + 3 + i * 2);
+    }
+#ifdef S3KM1110_DEBUG_DATA
     if (_uartDebug != nullptr) {
-        _uartDebug->println(F("––––––––––––––––––––––––––––––––––––––––"));
+        _uartDebug->print(F("Detected: "));
+        _uartDebug->print(isTargetDetected);
+        _uartDebug->print(F(" | Distance: "));
+        _uartDebug->println(distanceToTarget);
+        _uartDebug->print(F("Gate energy: "));
+        for (uint8_t i = 0; i < kDistanceGateCount; ++i) {
+            _uartDebug->print(distanceGateEnergy[i]);
+            _uartDebug->print(' ');
+        }
+        _uartDebug->println();
     }
-    #endif
-    return false;
+#endif
+    return true;
 }
 
 bool s3km1110::_parseCommandFrame()
 {
-    uint8_t frame_data_length = _radarDataFrame[4] + (_radarDataFrame[5] << 8);
-
-    _lastCommand = _radarDataFrame[6];
-    _isLatestCommandSuccess = (_radarDataFrame[8] == 0x00 && _radarDataFrame[9] == 0x00);
-
-    bool isWithPayloadSize = false;
-    if (_lastCommand == static_cast<uint8_t>(RadarCommand::ReadSerialNumber) || _lastCommand == static_cast<uint8_t>(RadarCommand::ReadFirmwareVersion)) {
-        isWithPayloadSize = true;
-    }
-
-    uint8_t startPayloadPosition = isWithPayloadSize ? 12 : 10;
-    int16_t frame_payload_length = _radarDataFramePosition - 4 - startPayloadPosition;
-
-    char payloadBytes[frame_payload_length + 1] = {0};
-    if (frame_payload_length > 0) {
-        for (uint8_t idx = 0; idx < frame_payload_length; idx++) {
-            payloadBytes[idx] = _radarDataFrame[startPayloadPosition + idx];
-        }
-    }
-
-    #ifdef S3KM1110_DEBUG_COMMANDS
-    if (_uartDebug != nullptr) {
-        _uartDebug->println(F("–––––––––––––––––––––––––––––––––––––––––––––"));
-        _uartDebug->print(F("RCV ACK: "));
-        _printCurrentFrame();
-        _uartDebug->printf("CMD: 0x%02x | Status: %s | Body: %u | Payload: %u\n", _lastCommand, _isLatestCommandSuccess ? "Ok" : "Failed", frame_data_length, frame_payload_length);
-        if (frame_payload_length > 0) {
-            _uartDebug->print(F("Raw payload: "));
-            for (uint8_t idx = 0; idx < frame_payload_length; idx++) {
-                _uartDebug->printf("%02x ", payloadBytes[idx]);
-            }
-            _uartDebug->print('\n');
-        }
-    }
-    #endif
-
-    bool isSuccess = false;
-    if (_lastCommand == static_cast<uint8_t>(RadarCommand::OpenCommandMode)) {
-        return _isLatestCommandSuccess;
-    }
-    else if (_lastCommand == static_cast<uint8_t>(RadarCommand::CloseCommandMode)) {
-        return _isLatestCommandSuccess;
-    }
-    else if (_lastCommand == static_cast<uint8_t>(RadarCommand::SetMode))
-    {
-        isSuccess = _isLatestCommandSuccess;
-    } 
-    else if (_lastCommand == static_cast<uint8_t>(RadarCommand::ReadSerialNumber))
-    {
-        if (frame_payload_length > 0) {
-            serialNumber = String(payloadBytes);
-            isSuccess = true;
-        }
-    } 
-    else if (_lastCommand == static_cast<uint8_t>(RadarCommand::ReadFirmwareVersion))
-    {
-        if (frame_payload_length > 0) {
-            firmwareVersion = String(payloadBytes);
-            isSuccess = true;
-        }
-    }
-    else if (_lastCommand == static_cast<uint8_t>(RadarCommand::SetConfig)) 
-    {
-        return _isLatestCommandSuccess;
-    }
-    else if (_lastCommand == static_cast<uint8_t>(RadarCommand::ReadConfig))
-    {
-        return _parseGetConfigCommandFrame(payloadBytes, frame_payload_length);
-    }
-    else 
-    {
-        #ifdef S3KM1110_DEBUG_COMMANDS
-        if (_uartDebug != nullptr) {
-            _uartDebug->print("[ERROR] Receive Unknown Command\n");
-        }
-        #endif
-    }
-
-    #ifdef S3KM1110_DEBUG_COMMANDS
-    if (_uartDebug != nullptr) {
-        _uartDebug->println(F("–––––––––––––––––––––––––––––––––––––––––––––"));
-    }
-    #endif
-    return isSuccess;
-}
-
-#pragma mark * Parse command helpers
-
-bool s3km1110::_parseGetConfigCommandFrame(char *payload, uint8_t count)
-{
-    if (count != 4) { return false; }
-    uint32_t result = payload[0] + (payload[1] << 8) + (payload[2] << 16) + (payload[3] << 24);
-
-    if (_lastRadarConfigCommand == ConfigParam::MinDistance) {
-        radarConfiguration.detectionGatesMin = result;
-    }
-    else if (_lastRadarConfigCommand == ConfigParam::MaxDistance) {
-        radarConfiguration.detectionGatesMax = result;
-    }
-    else if (_lastRadarConfigCommand == ConfigParam::DisappearanceDelay) {
-        radarConfiguration.targetDisappearanceDelay = result;
-    } else {
+    const uint16_t bodyLength = _readLittleEndian16(kLengthOffset);
+    if (bodyLength < kCommandResponseSize) {
         return false;
     }
 
-    return true;
+    _lastCommand = _radarDataFrame[kBodyOffset];
+    _isLatestCommandSuccess = false;
+    const RadarCommand command = static_cast<RadarCommand>(_lastCommand);
+    const bool hasStringLength = command == RadarCommand::ReadSerialNumber || command == RadarCommand::ReadFirmwareVersion;
+    const uint8_t responseSize = kCommandResponseSize + (hasStringLength ? kStringLengthSize : 0);
+    if (bodyLength < responseSize) {
+        return false;
+    }
+    const uint8_t payloadLength = static_cast<uint8_t>(bodyLength - responseSize);
+    if (hasStringLength && _readLittleEndian16(kBodyOffset + kCommandResponseSize) != payloadLength) {
+        return false;
+    }
+    const uint8_t *payload = _radarDataFrame + kBodyOffset + responseSize;
+    const bool statusOk = _readLittleEndian16(kBodyOffset + 2) == 0;
+#ifdef S3KM1110_DEBUG_COMMANDS
+    if (_uartDebug != nullptr) {
+        _uartDebug->print(F("RCV ACK: "));
+        _printCurrentFrame();
+        _uartDebug->print(F("Status: "));
+        _uartDebug->println(statusOk ? F("Ok") : F("Failed"));
+    }
+#endif
+    if (!statusOk) {
+        return false;
+    }
+
+    bool parsed = false;
+    switch (command) {
+        case RadarCommand::OpenCommandMode:
+        case RadarCommand::CloseCommandMode:
+        case RadarCommand::SetMode:
+        case RadarCommand::SetConfig:
+            parsed = true;
+            break;
+        case RadarCommand::ReadSerialNumber:
+            if (payloadLength > 0) {
+                serialNumber = readPayloadString(payload, payloadLength);
+                parsed = true;
+            }
+            break;
+        case RadarCommand::ReadFirmwareVersion:
+            if (payloadLength > 0) {
+                firmwareVersion = readPayloadString(payload, payloadLength);
+                parsed = true;
+            }
+            break;
+        case RadarCommand::ReadConfig:
+            parsed = _parseGetConfigCommandFrame(payload, payloadLength);
+            break;
+        default:
+            break;
+    }
+    _isLatestCommandSuccess = parsed;
+    return parsed;
 }
 
-bool s3km1110::_setParameterConfiguration(uint16_t parameterCode, int value)
+bool s3km1110::_parseGetConfigCommandFrame(const uint8_t *payload, uint8_t count)
 {
-    return _sendCommandAndWait(static_cast<uint8_t>(RadarCommand::SetConfig), parameterCode, 2, value, 4);
+    if (count != sizeof(uint32_t)) {
+        return false;
+    }
+    const uint32_t value = _readLittleEndian32(payload);
+    switch (_lastRadarConfigCommand) {
+        case ConfigParam::MinDistance:
+            radarConfiguration.detectionGatesMin = clampGate(value);
+            return true;
+        case ConfigParam::MaxDistance:
+            radarConfiguration.detectionGatesMax = clampGate(value);
+            return true;
+        case ConfigParam::DisappearanceDelay:
+            radarConfiguration.targetDisappearanceDelay = static_cast<uint16_t>(value > 65535UL ? 65535UL : value);
+            return true;
+        default:
+            return false;
+    }
 }
 
-#pragma mark - Command mode
+bool s3km1110::_setParameterConfiguration(ConfigParam parameter, uint32_t value)
+{
+    return _sendCommandAndWait(RadarCommand::SetConfig, static_cast<uint32_t>(parameter), 2, value, 4);
+}
 
 bool s3km1110::_openCommandMode()
 {
@@ -400,77 +402,77 @@ bool s3km1110::_closeCommandMode()
     return _sendCommandAndWait(RadarCommand::CloseCommandMode, 0, 0, true);
 }
 
-#pragma mark * Helpers
-
 void s3km1110::_writeLittleEndian(uint8_t *buffer, uint8_t &index, uint32_t value, uint8_t byteCount)
 {
-    for (uint8_t i = 0; i < byteCount; i++) {
-        buffer[index++] = (value >> (i * 8)) & 0xFF;
+    for (uint8_t i = 0; i < byteCount; ++i) {
+        buffer[index++] = static_cast<uint8_t>(value >> (i * 8));
     }
 }
 
-bool s3km1110::_sendCommandAndWait(RadarCommand command, uint32_t payload, uint8_t payloadSize, bool isSkipCommandMode)
+void s3km1110::_writeCommandFrame(RadarCommand command, uint32_t subCommand, uint8_t subCommandSize,
+                                 uint32_t payload, uint8_t payloadSize)
 {
-    return _sendCommandAndWait(static_cast<uint16_t>(command), 0, 0, payload, payloadSize, isSkipCommandMode);
+    // The largest supported request has a 2-byte command and two 32-bit fields.
+    uint8_t buffer[kMarkerSize + kFrameLengthSize + kFrameCommandSize + 2 * sizeof(uint32_t) + kMarkerSize];
+    uint8_t index = 0;
+    for (uint8_t byte : kCommandHeader) {
+        buffer[index++] = byte;
+    }
+    _writeLittleEndian(buffer, index, kFrameCommandSize + subCommandSize + payloadSize, kFrameLengthSize);
+    _writeLittleEndian(buffer, index, static_cast<uint16_t>(command), kFrameCommandSize);
+    _writeLittleEndian(buffer, index, subCommand, subCommandSize);
+    _writeLittleEndian(buffer, index, payload, payloadSize);
+    for (uint8_t byte : kCommandFooter) {
+        buffer[index++] = byte;
+    }
+#ifdef S3KM1110_DEBUG_COMMANDS
+    if (_uartDebug != nullptr) {
+        _uartDebug->print(F("SND HEX: "));
+        for (uint8_t i = 0; i < index; ++i) {
+            if (buffer[i] < 0x10) {
+                _uartDebug->print('0');
+            }
+            _uartDebug->print(buffer[i], HEX);
+            _uartDebug->print(' ');
+        }
+        _uartDebug->println();
+    }
+#endif
+    _uartRadar->write(buffer, index);
 }
 
-bool s3km1110::_sendCommandAndWait(
-    uint16_t command, 
-    uint32_t subCommand, 
-    uint8_t subCommandSize, 
-    uint32_t payload, 
-    uint8_t payloadSize,
-    bool isSkipCommandMode)
+bool s3km1110::_waitForCommandResponse(RadarCommand command)
 {
-
-    uint16_t dataLen = kFrameCommandSize + subCommandSize + payloadSize;
-    
-    uint8_t idx = 0;
-    uint8_t buffer[64]; 
-    buffer[idx++] = 0xFD; buffer[idx++] = 0xFC; buffer[idx++] = 0xFB; buffer[idx++] = 0xFA;
-
-    _writeLittleEndian(buffer, idx, dataLen, kFrameLengthSize);
-    _writeLittleEndian(buffer, idx, command, kFrameCommandSize);
-
-    if (subCommandSize > 0) {
-        _writeLittleEndian(buffer, idx, subCommand, subCommandSize);
-    }
-
-    if (payloadSize > 0) {
-        _writeLittleEndian(buffer, idx, payload, payloadSize);
-    }
-
-    buffer[idx++] = 0x04; buffer[idx++] = 0x03; buffer[idx++] = 0x02; buffer[idx++] = 0x01;
-    
-    
-    if (isSkipCommandMode || _openCommandMode()) {
-        
-        #ifdef S3KM1110_DEBUG_COMMANDS
-        if (_uartDebug != nullptr) {
-            _uartDebug->print(F("SND HEX: "));
-            for(uint8_t i=0; i<idx; i++) {
-                if(buffer[i] < 0x10) _uartDebug->print('0');
-                _uartDebug->print(buffer[i], HEX);
-            }
-            _uartDebug->println();
-        }
-        #endif
-
-        _uartRadar->write(buffer, idx);
-
-        _radarUartLastCommandTime = millis();
-        while (millis() - _radarUartLastCommandTime < kRadarUartcommandTimeout) {
-            if (_read_frame()) {
-                if (_isLatestCommandSuccess && _lastCommand == (uint8_t)command) { 
-                    if (!isSkipCommandMode) { _closeCommandMode(); }
-                    return true;
-                }
-            }
+    const uint32_t startTime = millis();
+    while (millis() - startTime < kCommandTimeoutMs) {
+        if (_readFrame() && _isLatestCommandSuccess && _lastCommand == static_cast<uint8_t>(command)) {
+            return true;
         }
     }
-
-    if (!isSkipCommandMode) { _closeCommandMode(); }
     return false;
 }
 
-#endif //s3km1110_cpp
+bool s3km1110::_sendCommandAndWait(RadarCommand command, uint32_t payload, uint8_t payloadSize, bool skipCommandMode)
+{
+    return _sendCommandAndWait(command, 0, 0, payload, payloadSize, skipCommandMode);
+}
+
+bool s3km1110::_sendCommandAndWait(RadarCommand command, uint32_t subCommand, uint8_t subCommandSize,
+                                 uint32_t payload, uint8_t payloadSize, bool skipCommandMode)
+{
+    if (_uartRadar == nullptr || subCommandSize > sizeof(uint32_t) || payloadSize > sizeof(uint32_t)) {
+        return false;
+    }
+
+    bool success = false;
+    if (skipCommandMode || _openCommandMode()) {
+        _isLatestCommandSuccess = false;
+        _writeCommandFrame(command, subCommand, subCommandSize, payload, payloadSize);
+        success = _waitForCommandResponse(command);
+    }
+    if (!skipCommandMode) {
+        const bool closed = _closeCommandMode();
+        success = success && closed;
+    }
+    return success;
+}

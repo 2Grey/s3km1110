@@ -1,10 +1,23 @@
 {
     "name": "s3km1110",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "description": "Unofficial library for the mmWave Sensor on S3KM1110 chip for Arduino",
-    "keywords": "s3km1110, mmWave, micro-motion",
+    "keywords": [
+        "s3km1110",
+        "mmwave",
+        "radar",
+        "presence",
+        "motion",
+        "arduino"
+    ],
     "license": "MIT",
-    "platforms": "*",
+    "frameworks": "arduino",
+    "platforms": [
+        "espressif32",
+        "espressif8266",
+        "atmelavr"
+    ],
+    "headers": "s3km1110.h",
     "repository": {
         "type": "git",
         "url": "https://github.com/2Grey/s3km1110.git"

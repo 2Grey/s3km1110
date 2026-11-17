@@ -36,11 +36,8 @@
 
 s3km1110 radar;
 
-uint32_t lastReading = 0;
-uint16_t lastDistance = 0;
+int16_t lastDistance = -1;
 bool isDetected = false;
-
-#pragma mark - Lyfe cycle
 
 void setup(void)
 {
@@ -65,49 +62,63 @@ void setup(void)
         delay(1000);
     }
 
-    Serial.printf("Radar status: %s\n", isRadarEnabled ? "Ok" : "Failed");
+    MONITOR_SERIAL.print(F("Radar status: "));
+    MONITOR_SERIAL.println(isRadarEnabled ? F("Ok") : F("Failed"));
 
     if (isRadarEnabled) {
         if (radar.readFirmwareVersion()) {
-          MONITOR_SERIAL.printf("[Info] Radar Firmware: %s\n", radar.firmwareVersion);
+            MONITOR_SERIAL.print(F("[Info] Radar Firmware: "));
+            MONITOR_SERIAL.println(radar.firmwareVersion);
         }
         if (radar.readSerialNumber()) {
-          MONITOR_SERIAL.printf("[Info] Radar Serial number: %s\n", radar.serialNumber);
+            MONITOR_SERIAL.print(F("[Info] Radar Serial number: "));
+            MONITOR_SERIAL.println(radar.serialNumber);
         }
 
-        auto config = radar.radarConfiguration;
-        MONITOR_SERIAL.printf("[Info] Radar config:\n");
-        MONITOR_SERIAL.printf("|- Gates min: %u\n", config.detectionGatesMin);
-        MONITOR_SERIAL.printf("|- Gates max %u\n", config.detectionGatesMax);
-        MONITOR_SERIAL.printf("|- Disappearance delay: %u sec\n", config.targetDisappearanceDelay);
+        const auto &config = radar.radarConfiguration;
+        MONITOR_SERIAL.println(F("[Info] Radar config:"));
+        MONITOR_SERIAL.print(F("|- Gates min: "));
+        MONITOR_SERIAL.println(config.detectionGatesMin);
+        MONITOR_SERIAL.print(F("|- Gates max: "));
+        MONITOR_SERIAL.println(config.detectionGatesMax);
+        MONITOR_SERIAL.print(F("|- Disappearance delay: "));
+        MONITOR_SERIAL.print(config.targetDisappearanceDelay);
+        MONITOR_SERIAL.println(F(" sec"));
     }
 }
 
 void loop(void)
 {
   if (radar.read()) {
-    bool newIsDetected = radar.isTargetDetected;
-    uint16_t newDistance = radar.distanceToTarget;
+    const bool newIsDetected = radar.isTargetDetected;
+    const int16_t newDistance = radar.distanceToTarget;
 
     if (isDetected && !newIsDetected) {
-        MONITOR_SERIAL.printf("[INFO] Target lost (Last known: %ucm)\n", lastDistance);
+        MONITOR_SERIAL.print(F("[INFO] Target lost (Last known: "));
+        MONITOR_SERIAL.print(lastDistance);
+        MONITOR_SERIAL.println(F("cm)"));
     } else if (!isDetected && newIsDetected) {
-          MONITOR_SERIAL.println("[INFO] Target FOUND!");
+        MONITOR_SERIAL.println(F("[INFO] Target FOUND!"));
     }
 
     isDetected = newIsDetected;
 
     if (isDetected && (lastDistance != newDistance)) {
-        MONITOR_SERIAL.printf("[INFO] Distance: %ucm\n", newDistance);
+        MONITOR_SERIAL.print(F("[INFO] Distance: "));
+        MONITOR_SERIAL.print(newDistance);
+        MONITOR_SERIAL.println(F("cm"));
     }
 
     lastDistance = newDistance;
   }
 
-  static uint32_t nextWarning = 0;
-  if (!radar.isActive() && millis() > nextWarning) {
-    // throttle warnings to at most once every 5 seconds
-    nextWarning = millis() + 5000;
+  static uint32_t lastWarning = 0;
+  static bool hasWarned = false;
+  const uint32_t currentTime = millis();
+  if (!radar.isActive() && (!hasWarned || currentTime - lastWarning >= 5000)) {
+    // Throttle warnings even when millis() wraps around.
+    lastWarning = currentTime;
+    hasWarned = true;
     MONITOR_SERIAL.println("[WARN] Radar not sending data (Check wiring or power)");
   }
 }
